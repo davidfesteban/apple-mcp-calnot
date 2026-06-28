@@ -54,31 +54,164 @@ export class ICloudNotesRuntimeAdapter {
           recordId: String(valueOf(note, 'id') || ''),
           title: String(valueOf(note, 'Title') || text.split('\n')[0] || 'Untitled'),
           text,
-          createdAt: dateValue(note, ['CreationDate', 'creationDate', 'createdAt', 'DateCreated']),
-          modifiedAt: dateValue(note, ['ModificationDate', 'modificationDate', 'modifiedAt', 'DateModified', 'lastModifiedDate']),
+          createdAt: dateValue(note, 'created', ['CreationDate', 'creationDate', 'createdAt', 'DateCreated', 'createDate', 'dateCreated', 'createdDate']),
+          modifiedAt: dateValue(note, 'modified', ['ModificationDate', 'modificationDate', 'modifiedAt', 'DateModified', 'lastModifiedDate', 'dateModified', 'updatedAt', 'lastChangeDate']),
           url: location.href,
           partial: false
         };
       }
 
-      function dateValue(note, keys) {
-        for (const key of keys) {
-          const value = valueOf(note, key);
-          const date = normalizeDate(note, value);
-          if (date) return date;
+      function dateValue(note, kind, keys) {
+        const prioritizedKeys = [
+          ...keys,
+          ...discoverDateKeys(note, kind)
+        ];
+        const seen = new Set();
+        const scoredDates = [];
+
+        for (const key of prioritizedKeys) {
+          if (typeof key !== 'string' || seen.has(key)) continue;
+          seen.add(key);
+          const date = normalizeDate(note, valueOf(note, key), key);
+          if (!date) continue;
+          scoredDates.push({ key: key.toLowerCase(), date, score: dateScore(key, kind) });
+        }
+        scoredDates.sort((a, b) => b.score - a.score);
+        return scoredDates[0]?.date || null;
+      }
+
+      function dateScore(key, kind) {
+        const normalized = String(key || '').toLowerCase();
+        if (kind === 'modified' && /(modified|updated|last|change|edit)/.test(normalized)) return 100;
+        if (kind === 'created' && /(create|created|new)/.test(normalized)) return 100;
+        return 10;
+      }
+
+      function discoverDateKeys(note, kind) {
+        const keys = [];
+        const seen = new Set();
+        let current = note;
+        let depth = 0;
+        const maxDepth = 2;
+        while (current && typeof current === 'object' && depth <= maxDepth) {
+          try {
+            for (const key of Object.getOwnPropertyNames(current)) {
+              if (typeof key !== 'string' || seen.has(key)) continue;
+              if (!/date|time|modified|created|updated|change|stamp|timestamp|sort/i.test(key)) continue;
+              if (/(toString|toJSON|valueOf|constructor|prototype|hasOwnProperty|isPrototypeOf|propertyIsEnumerable|__defineGetter__|__defineSetter__)/i.test(key)) continue;
+              keys.push(key);
+              seen.add(key);
+            }
+          } catch {}
+          current = Object.getPrototypeOf(current);
+          depth += 1;
+        }
+        return [
+          ...keys.filter(key => (kind === 'modified' ? /(modified|updated|change)/i.test(key) : /(create|created)/i.test(key))),
+          ...keys.filter(key => (kind === 'modified' ? !/(modified|updated|change)/i.test(key) : !/(create|created)/i.test(key)))
+        ];
+      }
+
+      function normalizeDate(note, value, keyHint = '') {
+        if (value == null) return null;
+        const raw = typeof value === 'function' ? safeInvoke(note, value) : value;
+        const date = toDate(raw, keyHint);
+        return toIso(date);
+      }
+
+      function normalizeNestedDate(raw, keyHint = '') {
+        const nested = raw;
+        const referenceInterval = maybeNumber(nested?.timeIntervalSinceReferenceDate);
+        if (referenceInterval != null) return new Date((referenceInterval * 1000) + 978307200000);
+        const unixInterval = maybeNumber(nested?.timeIntervalSinceNow1970) ?? maybeNumber(nested?.timeIntervalSince1970);
+        if (unixInterval != null) return toDateFromNumber(unixInterval, keyHint);
+        const nestedTime = maybeNumber(nested?.time ?? nested?.timestamp);
+        if (nestedTime != null) return toDateFromNumber(nestedTime, keyHint);
+        const nestedTimeMs = maybeNumber(nested?.timeIntervalSinceReferenceDateMs);
+        if (nestedTimeMs != null) return new Date(nestedTimeMs);
+        if (typeof nested?.toDate === 'function') {
+          try {
+            const converted = nested.toDate();
+            if (converted instanceof Date) return converted;
+          } catch {}
         }
         return null;
       }
 
-      function normalizeDate(note, value) {
-        if (!value) return null;
+      function safeInvoke(context, fn, keyHint = '') {
         try {
-          const raw = typeof value === 'function' ? value.call(note) : value;
-          const date = raw instanceof Date ? raw : new Date(raw);
-          return Number.isNaN(date.getTime()) ? null : date.toISOString();
+          return fn.call(context);
         } catch {
           return null;
         }
+      }
+
+      function toDate(raw, keyHint = '') {
+        if (raw instanceof Date) return raw;
+        if (raw == null) return null;
+        if (typeof raw === 'number' || typeof raw === 'bigint') return toDateFromNumber(Number(raw), keyHint);
+        if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          if (!trimmed) return null;
+          const numeric = Number(trimmed);
+          if (Number.isFinite(numeric) && String(numeric) === trimmed) {
+            return toDateFromNumber(numeric, keyHint);
+          }
+          const parsed = new Date(trimmed);
+          return isLikelyNotesDate(parsed, keyHint) ? parsed : null;
+        }
+        if (typeof raw === 'object') {
+          const nested = normalizeNestedDate(raw, keyHint);
+          if (nested) return nested;
+          const numeric = Number(raw);
+          if (Number.isFinite(numeric)) return toDateFromNumber(numeric, keyHint);
+        }
+        return null;
+      }
+
+      function toDateFromNumber(raw, keyHint = '') {
+        if (!Number.isFinite(raw) || raw <= 0) return null;
+        const candidates = [];
+        if (raw > 1e12 && raw < 1e17) {
+          candidates.push(raw);
+        } else if (raw > 1e9 && raw < 2e10) {
+          candidates.push(raw * 1000);
+        } else if (raw > 5e8 && raw <= 1e9) {
+          candidates.push((raw * 1000) + 978307200000);
+          candidates.push(raw * 1000);
+        } else if (raw > 1e6) {
+          candidates.push(raw * 1000);
+        }
+        const unique = [...new Set(candidates.map(candidate => Number(candidate)))];
+        const parsed = [];
+        for (const candidate of unique) {
+          const date = new Date(candidate);
+          if (isLikelyNotesDate(date, keyHint)) parsed.push(date);
+        }
+        if (!parsed.length) return null;
+        parsed.sort((a, b) => b.getTime() - a.getTime());
+        return parsed[0];
+      }
+
+      function isLikelyNotesDate(date, keyHint) {
+        const year = date.getUTCFullYear();
+        const isRecent = year > 1970 && year < 2100;
+        const hint = String(keyHint || '').toLowerCase();
+        if (!isRecent) return false;
+        if (/(created|creation)/.test(hint)) return year > 1990;
+        return true;
+      }
+
+      function toIso(date) {
+        if (!(date instanceof Date)) return null;
+        const epoch = date.getTime();
+        if (!Number.isFinite(epoch)) return null;
+        return new Date(epoch).toISOString();
+      }
+
+      function maybeNumber(value) {
+        if (!Number.isFinite(Number(value))) return null;
+        return Number(value);
       }
     }))) || [];
     return snapshots.map(snapshot => NoteDocument.appleSnapshotObject(snapshot));
@@ -98,15 +231,25 @@ export class ICloudNotesRuntimeAdapter {
       const note = Note.createNoteWithTitleText(text, folder);
       dataManager.userDidCreateNote(note);
       await note.save(true);
+      const createdAt = toOptionalIso(note.CreationDate ?? note.creationDate ?? note.DateCreated ?? note.createdAt ?? note.createDate);
+      const modifiedAt = toOptionalIso(note.ModificationDate ?? note.modificationDate ?? note.DateModified ?? note.modifiedAt ?? note.lastModifiedDate ?? new Date());
       return {
         recordId: String(note.id || ''),
         title: String(note.Title || text.split('\n')[0] || 'Untitled'),
         text,
-        createdAt: note.CreationDate || note.creationDate || null,
-        modifiedAt: note.ModificationDate || note.modificationDate || new Date().toISOString(),
+        createdAt,
+        modifiedAt,
         url: location.href,
         partial: false
       };
+
+      function toOptionalIso(value) {
+        try {
+          return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+        } catch {
+          return null;
+        }
+      }
     }, { text: fullText }));
 
     return snapshot ? NoteDocument.appleSnapshotObject(snapshot) : null;
@@ -128,15 +271,25 @@ export class ICloudNotesRuntimeAdapter {
       dataManager.topoTextManager.load(note.id, replacement);
       note.userDidChangeTopoText();
       await note.save(true);
+      const createdAt = toOptionalIso(note.CreationDate ?? note.creationDate ?? note.DateCreated ?? note.createdAt ?? note.createDate);
+      const modifiedAt = toOptionalIso(note.ModificationDate ?? note.modificationDate ?? note.DateModified ?? note.modifiedAt ?? note.lastModifiedDate ?? new Date());
       return {
         recordId: String(note.id || ''),
         title: String(note.Title || nextText.split('\n')[0] || 'Untitled'),
         text: nextText,
-        createdAt: note.CreationDate || note.creationDate || null,
-        modifiedAt: new Date().toISOString(),
+        createdAt,
+        modifiedAt,
         url: location.href,
         partial: false
       };
+
+      function toOptionalIso(value) {
+        try {
+          return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+        } catch {
+          return null;
+        }
+      }
     }, { recordId, body, appendText }));
 
     return snapshot ? NoteDocument.appleSnapshotObject(snapshot) : null;
