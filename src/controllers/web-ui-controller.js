@@ -41,8 +41,8 @@ export function createWebUiRouter({ auth, browser, notes, repository }) {
   router.get('/api/status', gate, async (_req, res) => {
     const state = await repository.getState();
     const browserStatus = await browser.status().catch(error => ({ error: error.message }));
-    const localNotes = await repository.listNotes({ limit: 10 });
-    res.json({ state: { started: Boolean(state.started) }, browser: browserStatus, notes: localNotes.length });
+    const localNotes = await repository.listNotes({ page: 1, pageSize: 5 });
+    res.json({ state: { started: Boolean(state.started) }, browser: browserStatus, notes: localNotes.items.length });
   });
 
   router.post('/api/browser/open', gate, async (_req, res) => {

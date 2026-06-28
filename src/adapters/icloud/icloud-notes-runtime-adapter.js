@@ -54,9 +54,31 @@ export class ICloudNotesRuntimeAdapter {
           recordId: String(valueOf(note, 'id') || ''),
           title: String(valueOf(note, 'Title') || text.split('\n')[0] || 'Untitled'),
           text,
+          createdAt: dateValue(note, ['CreationDate', 'creationDate', 'createdAt', 'DateCreated']),
+          modifiedAt: dateValue(note, ['ModificationDate', 'modificationDate', 'modifiedAt', 'DateModified', 'lastModifiedDate']),
           url: location.href,
           partial: false
         };
+      }
+
+      function dateValue(note, keys) {
+        for (const key of keys) {
+          const value = valueOf(note, key);
+          const date = normalizeDate(note, value);
+          if (date) return date;
+        }
+        return null;
+      }
+
+      function normalizeDate(note, value) {
+        if (!value) return null;
+        try {
+          const raw = typeof value === 'function' ? value.call(note) : value;
+          const date = raw instanceof Date ? raw : new Date(raw);
+          return Number.isNaN(date.getTime()) ? null : date.toISOString();
+        } catch {
+          return null;
+        }
       }
     }))) || [];
     return snapshots.map(snapshot => NoteDocument.appleSnapshotObject(snapshot));
@@ -80,6 +102,8 @@ export class ICloudNotesRuntimeAdapter {
         recordId: String(note.id || ''),
         title: String(note.Title || text.split('\n')[0] || 'Untitled'),
         text,
+        createdAt: note.CreationDate || note.creationDate || null,
+        modifiedAt: note.ModificationDate || note.modificationDate || new Date().toISOString(),
         url: location.href,
         partial: false
       };
@@ -108,6 +132,8 @@ export class ICloudNotesRuntimeAdapter {
         recordId: String(note.id || ''),
         title: String(note.Title || nextText.split('\n')[0] || 'Untitled'),
         text: nextText,
+        createdAt: note.CreationDate || note.creationDate || null,
+        modifiedAt: new Date().toISOString(),
         url: location.href,
         partial: false
       };

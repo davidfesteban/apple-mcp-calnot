@@ -31,12 +31,27 @@ test('summaries never expose full body content', () => {
   const summary = NoteDocument.summary({
     _id: { toString: () => 'note-id' },
     title: 'Title',
-    body: 'full body'
+    body: 'full body',
+    appleModifiedAt: new Date('2026-06-28T18:30:00Z')
   });
 
-  assert.deepEqual(Object.keys(summary), ['id', 'title', 'preview', 'bodyLength', 'partial', 'updatedAt', 'syncedAt']);
+  assert.deepEqual(Object.keys(summary), ['id', 'title', 'preview', 'bodyLength', 'partial', 'appleModifiedAt', 'updatedAt', 'syncedAt']);
   assert.equal(summary.id, 'note-id');
   assert.equal(summary.preview, 'full body');
   assert.equal(summary.bodyLength, 9);
+  assert.equal(summary.appleModifiedAt.toISOString(), '2026-06-28T18:30:00.000Z');
   assert.equal('body' in summary, false);
+});
+
+test('synced patches preserve Apple modified time as updatedAt', () => {
+  const modifiedAt = new Date('2026-06-28T18:31:00Z');
+  const patch = NoteDocument.syncedPatch({
+    externalId: 'icloud-record:1',
+    title: 'A',
+    body: 'B',
+    appleModifiedAt: modifiedAt
+  }, new Date('2026-06-28T18:40:00Z'));
+
+  assert.equal(patch.updatedAt.toISOString(), modifiedAt.toISOString());
+  assert.equal(patch.syncedAt.toISOString(), '2026-06-28T18:40:00.000Z');
 });

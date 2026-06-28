@@ -70,15 +70,79 @@ test('listNotes returns compact summaries, not full note bodies', async () => {
     browser: {},
     checkIntervalMs: 300000,
     repository: {
-      async listNotes() {
-        return [{ _id: { toString: () => '1' }, title: 'A', body: 'secret body' }];
+      async listNotes(args) {
+        assert.deepEqual(args, { page: 2, pageSize: 1 });
+        return {
+          items: [{ _id: { toString: () => '1' }, title: 'A', body: 'secret body' }],
+          syncing: false,
+          partial: false,
+          message: null,
+          map(mapper) {
+            return {
+              items: this.items.map(mapper),
+              pagination: { page: 2, pageSize: 1, hasMore: true, nextPage: 3 },
+              syncing: false,
+              partial: false,
+              message: null
+            };
+          }
+        };
       }
     }
   });
 
-  const [summary] = await service.listNotes({ limit: 1 });
+  const result = await service.listNotes({ page: 2, pageSize: 1 });
+  const [summary] = result.items;
   assert.equal(summary.id, '1');
   assert.equal(summary.preview, 'secret body');
   assert.equal(summary.bodyLength, 11);
+  assert.deepEqual(result.pagination, { page: 2, pageSize: 1, hasMore: true, nextPage: 3 });
   assert.equal('body' in summary, false);
+});
+
+test('listNotes returns current database page while sync is running', async () => {
+  let release;
+  const wait = new Promise(resolve => {
+    release = resolve;
+  });
+  const service = new NotesService({
+    checkIntervalMs: 300000,
+    browser: {
+      async openNotes() {},
+      async scrapeNotes() {
+        await wait;
+        return [];
+      }
+    },
+    repository: {
+      async upsertSyncedNote() {},
+      async listPendingWrites() {
+        return [];
+      },
+      async listNotes() {
+        return {
+          items: [],
+          map() {
+            return {
+              items: [],
+              pagination: { page: 1, pageSize: 5, hasMore: false, nextPage: null },
+              withSyncStatus({ syncing, message }) {
+                return { items: [], pagination: this.pagination, syncing, partial: syncing, message };
+              }
+            };
+          }
+        };
+      }
+    }
+  });
+
+  const sync = service.sync();
+  const result = await service.listNotes({ page: 1, pageSize: 5 });
+  release();
+  await sync;
+
+  assert.equal(result.syncing, true);
+  assert.equal(result.partial, true);
+  assert.deepEqual(result.items, []);
+  assert.equal(result.message, 'Notes sync is currently running. Showing the local database page available so far; retry shortly for fresher results.');
 });

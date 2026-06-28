@@ -4,7 +4,7 @@ import { NoteSummary } from './note-summary.js';
 import { NoteText } from './note-text.js';
 
 export class NoteDocument {
-  constructor({ externalId, cloudKit = null, title, body = '', url = null, source = LOCAL_SOURCE, partial = false, createdAt = null, updatedAt = null, syncedAt = null, deletedAt = null }) {
+  constructor({ externalId, cloudKit = null, title, body = '', url = null, source = LOCAL_SOURCE, partial = false, appleCreatedAt = null, appleModifiedAt = null, createdAt = null, updatedAt = null, syncedAt = null, deletedAt = null }) {
     this.externalId = externalId || title;
     this.cloudKit = cloudKit;
     this.title = NoteText.normalizeTitle(title);
@@ -12,6 +12,8 @@ export class NoteDocument {
     this.url = url;
     this.source = source;
     this.partial = Boolean(partial);
+    this.appleCreatedAt = normalizeDate(appleCreatedAt);
+    this.appleModifiedAt = normalizeDate(appleModifiedAt);
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
     this.syncedAt = syncedAt;
@@ -30,7 +32,9 @@ export class NoteDocument {
       body: NoteText.bodyWithoutTitle(text, title),
       url: path ? `https://www.icloud.com${path}` : snapshot?.url,
       source: APPLE_SOURCE,
-      partial: Boolean(snapshot?.partial)
+      partial: Boolean(snapshot?.partial),
+      appleCreatedAt: snapshot?.createdAt || null,
+      appleModifiedAt: snapshot?.modifiedAt || null
     });
   }
 
@@ -43,6 +47,8 @@ export class NoteDocument {
       url: note?.url || null,
       source: note?.source || LOCAL_SOURCE,
       partial: note?.partial,
+      appleCreatedAt: note?.appleCreatedAt || null,
+      appleModifiedAt: note?.appleModifiedAt || null,
       createdAt: note?.createdAt || null,
       updatedAt: note?.updatedAt || null,
       syncedAt: note?.syncedAt || null,
@@ -81,6 +87,8 @@ export class NoteDocument {
     return {
       title: this.title,
       body: this.body,
+      appleCreatedAt: this.appleCreatedAt,
+      appleModifiedAt: this.appleModifiedAt,
       source: this.source,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
@@ -96,9 +104,11 @@ export class NoteDocument {
       body: this.body,
       source: APPLE_SOURCE,
       partial: this.partial,
+      appleCreatedAt: this.appleCreatedAt,
+      appleModifiedAt: this.appleModifiedAt,
       deletedAt: null,
       syncedAt: now,
-      updatedAt: now
+      updatedAt: this.appleModifiedAt || now
     };
   }
 
@@ -110,7 +120,9 @@ export class NoteDocument {
       body: this.body,
       url: this.url,
       source: this.source,
-      partial: this.partial
+      partial: this.partial,
+      appleCreatedAt: this.appleCreatedAt,
+      appleModifiedAt: this.appleModifiedAt
     };
   }
 
@@ -120,8 +132,15 @@ export class NoteDocument {
       title: this.title,
       body: this.body,
       partial: this.partial,
+      appleModifiedAt: this.appleModifiedAt,
       updatedAt: this.updatedAt,
       syncedAt: this.syncedAt
     });
   }
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

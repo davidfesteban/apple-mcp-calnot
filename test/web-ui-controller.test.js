@@ -76,7 +76,7 @@ function testApp() {
         return { started, tokenHash };
       },
       async listNotes() {
-        return [];
+        return { items: [] };
       }
     }
   }));

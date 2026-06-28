@@ -44,9 +44,12 @@ function createServer(notes) {
   const server = new McpServer({ name: 'apple-mcp-calnot', version: '0.1.0' });
 
   server.registerTool('listNotes', {
-    description: 'List synced Apple Note summaries. Returns ids, titles, short previews, and lengths; use getNote for full content.',
-    inputSchema: { limit: z.number().int().min(1).max(100).default(25) }
-  }, async ({ limit }) => textResult(await notes.listNotes({ limit })));
+    description: 'List one page of synced Apple Note summaries ordered by Apple modified time. Default is 5 per page; use getNote for full content.',
+    inputSchema: {
+      page: z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(10).default(5)
+    }
+  }, async ({ page, pageSize }) => textResult(await notes.listNotes({ page, pageSize })));
 
   server.registerTool('getNote', {
     description: 'Get one synced Apple Note by id, including full body content.',
@@ -60,9 +63,10 @@ function createServer(notes) {
     description: 'Search synced Apple Notes and return summaries. Use getNote with an id for full content.',
     inputSchema: {
       query: z.string().min(1),
-      limit: z.number().int().min(1).max(50).default(20)
+      page: z.number().int().min(1).default(1),
+      pageSize: z.number().int().min(1).max(10).default(5)
     }
-  }, async ({ query, limit }) => textResult(await notes.searchNotes(query, { limit })));
+  }, async ({ query, page, pageSize }) => textResult(await notes.searchNotes(query, { page, pageSize })));
 
   server.registerTool('createNote', {
     description: 'Create an Apple Note through the authenticated iCloud Notes runtime and sync it locally.',

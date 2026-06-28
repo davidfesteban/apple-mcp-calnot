@@ -1,5 +1,6 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import { NoteDocument } from '../models/note-document.js';
+import { PaginatedResult } from '../models/paginated-result.js';
 
 export class MongoNotesRepository {
   constructor({ url, dbName }) {
@@ -15,6 +16,7 @@ export class MongoNotesRepository {
     this.pendingWrites = this.db.collection('pending_writes');
     await this.notes.createIndex({ title: 'text', body: 'text' });
     await this.notes.createIndex({ updatedAt: -1 });
+    await this.notes.createIndex({ appleModifiedAt: -1, appleCreatedAt: -1, _id: -1 });
     await this.pendingWrites.createIndex({ createdAt: 1 });
   }
 
@@ -84,17 +86,27 @@ export class MongoNotesRepository {
     return this.notes.findOne({ _id: new ObjectId(id), deletedAt: null });
   }
 
-  async listNotes({ limit = 50 } = {}) {
-    return this.notes.find({ deletedAt: null }).sort({ updatedAt: -1 }).limit(limit).toArray();
+  async listNotes({ page = 1, pageSize = 5 } = {}) {
+    const pagination = normalizePagination({ page, pageSize });
+    const notes = await this.notes
+      .find({ deletedAt: null })
+      .sort({ appleModifiedAt: -1, appleCreatedAt: -1, updatedAt: -1, _id: -1 })
+      .skip((pagination.page - 1) * pagination.pageSize)
+      .limit(pagination.pageSize + 1)
+      .toArray();
+    return pageResult(notes, pagination);
   }
 
-  async searchNotes(query, { limit = 20 } = {}) {
-    if (!query?.trim()) return this.listNotes({ limit });
-    return this.notes
+  async searchNotes(query, { page = 1, pageSize = 5 } = {}) {
+    if (!query?.trim()) return this.listNotes({ page, pageSize });
+    const pagination = normalizePagination({ page, pageSize });
+    const notes = await this.notes
       .find({ $text: { $search: query }, deletedAt: null }, { projection: { score: { $meta: 'textScore' } } })
-      .sort({ score: { $meta: 'textScore' } })
-      .limit(limit)
+      .sort({ score: { $meta: 'textScore' }, appleModifiedAt: -1, updatedAt: -1, _id: -1 })
+      .skip((pagination.page - 1) * pagination.pageSize)
+      .limit(pagination.pageSize + 1)
       .toArray();
+    return pageResult(notes, pagination);
   }
 
   async addPendingWrite(write) {
@@ -112,4 +124,26 @@ export class MongoNotesRepository {
       { $set: { ...patch, updatedAt: new Date() } }
     );
   }
+}
+
+function normalizePagination({ page, pageSize }) {
+  return {
+    page: positiveInt(page, 1),
+    pageSize: Math.min(positiveInt(pageSize, 5), 25)
+  };
+}
+
+function positiveInt(input, fallback) {
+  const value = Number(input);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.trunc(value));
+}
+
+function pageResult(notes, pagination) {
+  return new PaginatedResult({
+    items: notes.slice(0, pagination.pageSize),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    hasMore: notes.length > pagination.pageSize
+  });
 }

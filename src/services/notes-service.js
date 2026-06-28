@@ -40,8 +40,8 @@ export class NotesService {
   }
 
   async listNotes(args) {
-    const notes = await this.repository.listNotes(args);
-    return notes.map(note => NoteDocument.summary(note));
+    const page = await this.repository.listNotes(args);
+    return this.withSyncStatus(page.map(note => NoteDocument.summary(note)), 'Notes sync is currently running. Showing the local database page available so far; retry shortly for fresher results.');
   }
 
   async getNote(id) {
@@ -49,8 +49,16 @@ export class NotesService {
   }
 
   async searchNotes(query, args) {
-    const notes = await this.repository.searchNotes(query, args);
-    return notes.map(note => NoteDocument.summary(note));
+    const page = await this.repository.searchNotes(query, args);
+    return this.withSyncStatus(page.map(note => NoteDocument.summary(note)), 'Notes sync is currently running. Search results may be incomplete while the database is still filling.');
+  }
+
+  isSyncing() {
+    return Boolean(this.syncPromise);
+  }
+
+  withSyncStatus(page, message) {
+    return this.isSyncing() ? page.withSyncStatus({ syncing: true, message }) : page;
   }
 
   async createNote({ title, body }) {
