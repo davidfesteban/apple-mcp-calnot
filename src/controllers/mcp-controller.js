@@ -44,12 +44,12 @@ function createServer(notes) {
   const server = new McpServer({ name: 'apple-mcp-calnot', version: '0.1.0' });
 
   server.registerTool('listNotes', {
-    description: 'List locally synced Apple Notes.',
-    inputSchema: { limit: z.number().int().min(1).max(100).default(50) }
+    description: 'List synced Apple Note summaries. Returns ids, titles, short previews, and lengths; use getNote for full content.',
+    inputSchema: { limit: z.number().int().min(1).max(100).default(25) }
   }, async ({ limit }) => textResult(await notes.listNotes({ limit })));
 
   server.registerTool('getNote', {
-    description: 'Get a locally synced Apple Note by id.',
+    description: 'Get one synced Apple Note by id, including full body content.',
     inputSchema: { id: z.string().min(1) }
   }, async ({ id }) => {
     const result = await notes.getNote(id);
@@ -57,7 +57,7 @@ function createServer(notes) {
   });
 
   server.registerTool('searchNotes', {
-    description: 'Search locally synced Apple Notes.',
+    description: 'Search synced Apple Notes and return summaries. Use getNote with an id for full content.',
     inputSchema: {
       query: z.string().min(1),
       limit: z.number().int().min(1).max(50).default(20)

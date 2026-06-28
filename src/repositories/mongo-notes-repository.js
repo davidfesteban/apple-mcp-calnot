@@ -1,6 +1,7 @@
 import { MongoClient, ObjectId } from 'mongodb';
+import { NoteDocument } from '../models/note-document.js';
 
-export class Repository {
+export class MongoNotesRepository {
   constructor({ url, dbName }) {
     this.client = new MongoClient(url);
     this.dbName = dbName;
@@ -37,40 +38,18 @@ export class Repository {
 
   async upsertSyncedNote(note) {
     const now = new Date();
-    const externalId = note.externalId || note.title;
+    const patch = NoteDocument.syncedPatch(note, now);
     if (note.localId && ObjectId.isValid(note.localId)) {
       await this.notes.updateOne(
         { _id: new ObjectId(note.localId) },
-        {
-          $set: {
-            externalId,
-            cloudKit: note.cloudKit || null,
-            title: note.title || 'Untitled',
-            body: note.body || '',
-            source: 'apple',
-            partial: Boolean(note.partial),
-            deletedAt: null,
-            syncedAt: now,
-            updatedAt: now
-          }
-        }
+        { $set: patch }
       );
       return;
     }
     await this.notes.updateOne(
-      { externalId },
+      { externalId: patch.externalId },
       {
-        $set: {
-          externalId,
-          cloudKit: note.cloudKit || null,
-          title: note.title || 'Untitled',
-          body: note.body || '',
-          source: 'apple',
-          partial: Boolean(note.partial),
-          deletedAt: null,
-          syncedAt: now,
-          updatedAt: now
-        },
+        $set: patch,
         $setOnInsert: { _id: new ObjectId(), createdAt: now }
       },
       { upsert: true }
@@ -79,14 +58,7 @@ export class Repository {
 
   async createLocalNote({ title, body }) {
     const now = new Date();
-    const doc = {
-      title: title || 'Untitled',
-      body: body || '',
-      source: 'local',
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null
-    };
+    const doc = NoteDocument.localInsertDocument({ title, body }, now);
     const result = await this.notes.insertOne(doc);
     return { ...doc, _id: result.insertedId };
   }

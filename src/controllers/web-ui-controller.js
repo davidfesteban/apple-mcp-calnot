@@ -22,23 +22,20 @@ export function createWebUiRouter({ auth, browser, notes, repository }) {
     const state = await repository.getState();
     if (state.started) return res.status(409).json({ error: 'already started' });
     const token = await auth.issueToken();
-    auth.setCookie(res, token);
-    res.json({ token });
+    res.json({ token, mcpUrl: mcpUrl(_req, token) });
   });
 
   router.post('/api/session', async (req, res) => {
     const token = auth.extractToken(req);
     if (!(await auth.validateToken(token))) return res.status(401).json({ error: 'invalid token' });
-    auth.setCookie(res, token);
     res.json({ ok: true });
   });
 
   router.post('/api/setup/start', async (req, res) => {
     const token = auth.extractToken(req);
     if (!(await auth.start(token))) return res.status(401).json({ error: 'valid token required' });
-    auth.setCookie(res, token);
     await notes.start();
-    res.json({ started: true });
+    res.json({ started: true, mcpUrl: mcpUrl(req, token) });
   });
 
   router.get('/api/status', gate, async (_req, res) => {
@@ -87,6 +84,10 @@ export function createWebUiRouter({ auth, browser, notes, repository }) {
   return router;
 }
 
+function mcpUrl(req, token) {
+  return `${req.protocol}://${req.get('host')}/mcp?token=${encodeURIComponent(token)}`;
+}
+
 function html() {
   return `<!doctype html>
 <html lang="en">
@@ -107,7 +108,7 @@ function html() {
     .row { display: flex; gap: 8px; margin: 10px 0; }
     .row > * { flex: 1; }
     .hidden { display: none; }
-    .token { overflow-wrap: anywhere; background: #f0f0f0; padding: 10px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .token { overflow-wrap: anywhere; background: #f0f0f0; padding: 10px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; margin: 10px 0; }
     #browser { width: 100%; max-width: 1280px; border: 1px solid #ccc; background: #fff; display: block; outline: none; }
     #browser:focus { border-color: #171717; }
     #log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
@@ -124,6 +125,8 @@ function html() {
       <div id="setup">
         <div class="row"><button id="primary">Generate Code</button></div>
         <div id="token" class="token hidden"></div>
+        <div id="mcpUrl" class="token hidden"></div>
+        <div class="row"><button id="copyMcp" class="hidden">Copy MCP URL</button></div>
       </div>
       <pre id="log"></pre>
     </aside>
@@ -134,6 +137,8 @@ function html() {
   <script>
     const tokenInput = document.getElementById('tokenInput');
     const tokenBox = document.getElementById('token');
+    const mcpUrlBox = document.getElementById('mcpUrl');
+    const copyMcp = document.getElementById('copyMcp');
     const primary = document.getElementById('primary');
     const locked = document.getElementById('locked');
     const setup = document.getElementById('setup');
@@ -145,6 +150,7 @@ function html() {
     tokenInput.value = token;
 
     const headers = () => ({ 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) });
+    const mcpUrl = () => location.origin + '/mcp?token=' + encodeURIComponent(token);
     const write = value => { log.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
     async function api(path, options = {}) {
       const res = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
@@ -164,13 +170,24 @@ function html() {
       locked.classList.toggle('hidden', !started || state.authorized);
       setup.classList.toggle('hidden', started);
       tokenBox.classList.toggle('hidden', !token);
-      if (token) tokenBox.textContent = token;
+      mcpUrlBox.classList.toggle('hidden', !token);
+      copyMcp.classList.toggle('hidden', !token);
+      if (token) {
+        tokenBox.textContent = 'Access code: ' + token;
+        mcpUrlBox.textContent = mcpUrl();
+      }
       primary.textContent = generated ? 'Start' : 'Generate Code';
     }
-    async function refresh() {
+    function refreshScreenshot() {
+      browser.src = '/api/browser/screenshot?token=' + encodeURIComponent(token) + '&t=' + Date.now();
+    }
+    async function refreshState() {
       const state = await api('/api/state').catch(error => write(error.message));
       render(state);
-      browser.src = '/api/browser/screenshot?token=' + encodeURIComponent(token) + '&t=' + Date.now();
+    }
+    async function refresh() {
+      await refreshState();
+      refreshScreenshot();
     }
     primary.onclick = async () => {
       primary.disabled = true;
@@ -181,7 +198,7 @@ function html() {
           generated = true;
           localStorage.setItem('apple_mcp_token', token);
           tokenInput.value = token;
-          await navigator.clipboard?.writeText(token).catch(() => {});
+          await navigator.clipboard?.writeText(data.mcpUrl || mcpUrl()).catch(() => {});
         } else {
           await api('/api/setup/start', { method: 'POST', body: JSON.stringify({ token }) });
         }
@@ -195,6 +212,10 @@ function html() {
       localStorage.setItem('apple_mcp_token', token);
       await api('/api/session', { method: 'POST', body: JSON.stringify({ token }) });
       refresh();
+    };
+    copyMcp.onclick = async () => {
+      await navigator.clipboard?.writeText(mcpUrl()).catch(() => {});
+      write({ copied: mcpUrl() });
     };
     browser.onclick = event => {
       browser.focus();
@@ -217,7 +238,8 @@ function html() {
       const text = event.clipboardData.getData('text');
       api('/api/browser/type', { method: 'POST', body: JSON.stringify({ text }) }).then(refresh);
     };
-    setInterval(refresh, 4000);
+    setInterval(refreshScreenshot, 1000);
+    setInterval(refreshState, 4000);
     refresh().then(() => {
       if (!started) openNotes();
     });

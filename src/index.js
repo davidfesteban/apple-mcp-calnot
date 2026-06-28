@@ -1,33 +1,12 @@
 import cookieParser from 'cookie-parser';
 import express from 'express';
-import { BrowserController } from './components/browser.js';
-import { Repository } from './components/repository.js';
-import { createMcpRouter } from './controller/mcp.js';
-import { createWebUiRouter } from './controller/webui.js';
-import { AuthProcessor } from './processors/auth.js';
-import { NotesProcessor } from './processors/notes.js';
+import { ApplicationContainer } from './app/application-container.js';
+import { createMcpRouter } from './controllers/mcp-controller.js';
+import { createWebUiRouter } from './controllers/web-ui-controller.js';
 
 const port = Number(process.env.PORT || 3000);
-const dataDir = process.env.DATA_DIR || './data';
-
-const repository = new Repository({
-  url: process.env.MONGO_URL || 'mongodb://localhost:27017',
-  dbName: process.env.MONGO_DB || 'apple_mcp_calnot'
-});
-await repository.connect();
-
-const auth = new AuthProcessor(repository);
-const browser = new BrowserController({
-  dataDir,
-  headless: process.env.BROWSER_HEADLESS !== 'false',
-  notesUrl: process.env.APPLE_NOTES_URL || 'https://www.icloud.com/notes'
-});
-const notes = new NotesProcessor({
-  repository,
-  browser,
-  notesUrl: process.env.APPLE_NOTES_URL || 'https://www.icloud.com/notes',
-  checkIntervalMs: Number(process.env.CHECK_INTERVAL_MS || process.env.SYNC_INTERVAL_MS || 300000)
-});
+const container = await new ApplicationContainer().start();
+const { auth, browser, notes, repository } = container;
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -42,9 +21,7 @@ const server = app.listen(port, () => {
 
 const shutdown = async () => {
   server.close();
-  await notes.stop();
-  await browser.close();
-  await repository.close();
+  await container.stop();
   process.exit(0);
 };
 

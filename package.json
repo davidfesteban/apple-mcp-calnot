@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node --check src/controller/webui.js && node --check src/controller/mcp.js && node --check src/components/browser.js && node --check src/components/repository.js && node --check src/processors/auth.js && node --check src/processors/notes.js"
+    "check": "find src -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "test": "node --test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

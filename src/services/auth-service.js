@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 const cookieName = 'apple_mcp_token';
 
-export class AuthProcessor {
+export class AuthService {
   constructor(repository) {
     this.repository = repository;
   }
