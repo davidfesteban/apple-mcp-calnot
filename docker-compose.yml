@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: apple_mcp_calnot
+      DATA_DIR: /data
+      APPLE_NOTES_URL: https://www.icloud.com/notes
+      BROWSER_HEADLESS: "true"
+      SYNC_INTERVAL_MS: "30000"
+    volumes:
+      - app-data:/data
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  app-data:
+  mongo-data:
