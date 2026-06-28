@@ -19,7 +19,7 @@ make clean
 To apply code changes to the app container while preserving volumes/session:
 
 ```bash
-docker compose up -d --build app
+docker compose up -d --build mcp-notes
 ```
 
 ## Login Flow
@@ -232,3 +232,39 @@ MCP writes now use this runtime path first. UI keyboard fallback remains only as
 ```bash
 npm run check
 ```
+
+## MCP Endpoint
+
+The MCP server is exposed at:
+
+```text
+POST /mcp
+```
+
+Authentication accepts any of:
+
+```text
+Authorization: Bearer <generated-code>
+X-Auth-Token: <generated-code>
+?token=<generated-code>
+apple_mcp_token cookie
+```
+
+The server advertises these MCP tools:
+
+```text
+listNotes
+getNote
+searchNotes
+createNote
+appendNote
+deleteNote
+```
+
+For ChatGPT testing, expose the app over HTTPS and configure the MCP URL as:
+
+```text
+https://your-domain.example/mcp?token=<generated-code>
+```
+
+Using the token in the URL is convenient for testing because the current server uses a generated static code, not OAuth. For a durable public deployment, prefer adding OAuth or a reverse proxy that injects the bearer token server-side, so the code is not stored in connector URLs or logs.

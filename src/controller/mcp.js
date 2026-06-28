@@ -65,7 +65,7 @@ function createServer(notes) {
   }, async ({ query, limit }) => textResult(await notes.searchNotes(query, { limit })));
 
   server.registerTool('createNote', {
-    description: 'Create a note locally and queue it for Apple Notes writeback.',
+    description: 'Create an Apple Note through the authenticated iCloud Notes runtime and sync it locally.',
     inputSchema: {
       title: z.string().min(1),
       body: z.string().default('')
@@ -73,7 +73,7 @@ function createServer(notes) {
   }, async args => textResult(await notes.createNote(args)));
 
   server.registerTool('appendNote', {
-    description: 'Append text to a local note and queue Apple Notes writeback.',
+    description: 'Append text to an Apple Note through the authenticated iCloud Notes runtime and sync it locally.',
     inputSchema: {
       id: z.string().min(1),
       text: z.string().min(1)
@@ -84,7 +84,7 @@ function createServer(notes) {
   });
 
   server.registerTool('deleteNote', {
-    description: 'Soft-delete a local note and queue Apple Notes deletion.',
+    description: 'Move an Apple Note to Recently Deleted through the authenticated iCloud Notes runtime and soft-delete it locally.',
     inputSchema: { id: z.string().min(1) }
   }, async args => {
     const result = await notes.deleteNote(args);

@@ -1,26 +1,50 @@
+x-deploy-agent:
+  enabled: true
+  force_redeploy: true
+  clean_deploy: false
+  descriptor: mcp-notes
+
 services:
-  app:
+  mcp-notes:
     build: .
-    ports:
-      - "3000:3000"
+    restart: unless-stopped
     environment:
       PORT: "3000"
-      MONGO_URL: mongodb://mongo:27017
+      MONGO_URL: mongodb://mcp-notes-mongo:27017
       MONGO_DB: apple_mcp_calnot
       DATA_DIR: /data
       APPLE_NOTES_URL: https://www.icloud.com/notes
       BROWSER_HEADLESS: "true"
       CHECK_INTERVAL_MS: "300000"
     volumes:
-      - app-data:/data
+      - mcp-notes-data:/data
+    labels:
+      caddy: "notes.mcp.misei.dev"
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      homepage.group: "Deployments"
+      homepage.name: "Apple MCP Notes"
+      homepage.icon: "web"
+      homepage.href: "https://notes.mcp.misei.dev"
+      homepage.description: "iCloud Notes MCP bridge"
+    networks:
+      - public
+      - default
     depends_on:
-      - mongo
+      - mcp-notes-mongo
 
-  mongo:
+  mcp-notes-mongo:
     image: mongo:7
+    restart: unless-stopped
     volumes:
       - mongo-data:/data/db
+    networks:
+      - default
+
+networks:
+  public:
+    name: public
+    external: true
 
 volumes:
-  app-data:
+  mcp-notes-data:
   mongo-data:
