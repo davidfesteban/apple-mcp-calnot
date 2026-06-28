@@ -1,6 +1,6 @@
 x-deploy-agent:
   enabled: true
-  force_redeploy: true
+  force_redeploy: false
   clean_deploy: false
   descriptor: public-web
 
