@@ -38,14 +38,35 @@ export class Repository {
   async upsertSyncedNote(note) {
     const now = new Date();
     const externalId = note.externalId || note.title;
+    if (note.localId && ObjectId.isValid(note.localId)) {
+      await this.notes.updateOne(
+        { _id: new ObjectId(note.localId) },
+        {
+          $set: {
+            externalId,
+            cloudKit: note.cloudKit || null,
+            title: note.title || 'Untitled',
+            body: note.body || '',
+            source: 'apple',
+            partial: Boolean(note.partial),
+            deletedAt: null,
+            syncedAt: now,
+            updatedAt: now
+          }
+        }
+      );
+      return;
+    }
     await this.notes.updateOne(
       { externalId },
       {
         $set: {
           externalId,
+          cloudKit: note.cloudKit || null,
           title: note.title || 'Untitled',
           body: note.body || '',
           source: 'apple',
+          partial: Boolean(note.partial),
           deletedAt: null,
           syncedAt: now,
           updatedAt: now
@@ -107,5 +128,16 @@ export class Repository {
   async addPendingWrite(write) {
     const now = new Date();
     await this.pendingWrites.insertOne({ ...write, status: 'pending', createdAt: now, updatedAt: now });
+  }
+
+  async listPendingWrites({ limit = 20 } = {}) {
+    return this.pendingWrites.find({ status: 'pending' }).sort({ createdAt: 1 }).limit(limit).toArray();
+  }
+
+  async markPendingWrite(id, patch) {
+    await this.pendingWrites.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...patch, updatedAt: new Date() } }
+    );
   }
 }

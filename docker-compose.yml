@@ -10,7 +10,7 @@ services:
       DATA_DIR: /data
       APPLE_NOTES_URL: https://www.icloud.com/notes
       BROWSER_HEADLESS: "true"
-      SYNC_INTERVAL_MS: "30000"
+      CHECK_INTERVAL_MS: "300000"
     volumes:
       - app-data:/data
     depends_on:

@@ -2,12 +2,12 @@
 
 help:
 	@printf "Targets:\n"
-	@printf "  make start  Start/rebuild the Docker Compose stack\n"
+	@printf "  make start  Start the Docker Compose stack without rebuilding\n"
 	@printf "  make stop   Stop the Docker Compose stack\n"
 	@printf "  make clean  Stop and remove containers, networks, and volumes\n"
 
 start:
-	docker compose up -d --build
+	docker compose up -d
 
 stop:
 	docker compose down --remove-orphans

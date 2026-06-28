@@ -26,7 +26,7 @@ const notes = new NotesProcessor({
   repository,
   browser,
   notesUrl: process.env.APPLE_NOTES_URL || 'https://www.icloud.com/notes',
-  syncIntervalMs: Number(process.env.SYNC_INTERVAL_MS || 30000)
+  checkIntervalMs: Number(process.env.CHECK_INTERVAL_MS || process.env.SYNC_INTERVAL_MS || 300000)
 });
 
 const app = express();

@@ -53,8 +53,12 @@ export function createWebUiRouter({ auth, browser, notes, repository }) {
   });
 
   router.get('/api/browser/screenshot', gate, async (_req, res) => {
-    const image = await browser.screenshot();
-    res.type('jpg').send(image);
+    try {
+      const image = await browser.screenshot();
+      res.type('jpg').send(image);
+    } catch (error) {
+      res.status(503).json({ error: error.message });
+    }
   });
 
   router.post('/api/browser/click', gate, async (req, res) => {
@@ -74,6 +78,10 @@ export function createWebUiRouter({ auth, browser, notes, repository }) {
 
   router.post('/api/sync', gate, async (_req, res) => {
     res.json(await notes.sync());
+  });
+
+  router.get('/api/debug/icloud', gate, async (_req, res) => {
+    res.json(await browser.inspectNotesRuntime());
   });
 
   return router;
