@@ -75,7 +75,8 @@ export class NotesProcessor {
   }
 
   async listNotes(args) {
-    return this.repository.listNotes(args);
+    const notes = await this.repository.listNotes(args);
+    return notes.map(noteSummary);
   }
 
   async getNote(id) {
@@ -83,7 +84,8 @@ export class NotesProcessor {
   }
 
   async searchNotes(query, args) {
-    return this.repository.searchNotes(query, args);
+    const notes = await this.repository.searchNotes(query, args);
+    return notes.map(noteSummary);
   }
 
   async createNote({ title, body }) {
@@ -147,4 +149,18 @@ export class NotesProcessor {
       return 'queued_after_error';
     }
   }
+}
+
+function noteSummary(note) {
+  return {
+    _id: note._id,
+    title: note.title,
+    preview: String(note.body || '').slice(0, 300),
+    bodyLength: String(note.body || '').length,
+    source: note.source,
+    partial: Boolean(note.partial),
+    updatedAt: note.updatedAt,
+    syncedAt: note.syncedAt,
+    cloudKit: note.cloudKit
+  };
 }
