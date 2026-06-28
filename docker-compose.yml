@@ -2,7 +2,7 @@ x-deploy-agent:
   enabled: true
   force_redeploy: true
   clean_deploy: false
-  descriptor: mcp-notes
+  descriptor: public-web
 
 services:
   mcp-notes:
